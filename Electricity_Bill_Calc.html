@@ -1,0 +1,808 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Electricity Bill Split Calculator</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        /* ── BASE: MOBILE FIRST ── */
+        body {
+            font-family: 'Inter', Arial, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            padding: 0 0 40px;
+            color: #333;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .container { width: 100%; }
+
+        /* ── FORM CARD ── */
+        .card {
+            background: #fff;
+            border-radius: 0;
+            box-shadow: none;
+            overflow: hidden;
+        }
+
+        .card-header {
+            background: linear-gradient(135deg, #e94560, #c62a47);
+            padding: 22px 18px 18px;
+            text-align: center;
+            color: #fff;
+        }
+        .card-header h2 { font-size: 1.2rem; font-weight: 700; letter-spacing: -0.3px; }
+        .card-header p  { opacity: 0.82; font-size: 0.8rem; margin-top: 4px; }
+
+        .card-body { padding: 16px 14px 20px; }
+
+        /* ── SECTION LABELS & HEADERS ── */
+        .section-label {
+            font-size: 0.68rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            color: #aaa;
+            margin: 18px 0 10px;
+        }
+        .section-label:first-child { margin-top: 0; }
+
+        .section-hdr {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 18px 0 8px;
+        }
+        .section-hdr .section-label { margin: 0; }
+
+        /* ── FORM ELEMENTS ── */
+        .form-group { margin-bottom: 10px; }
+
+        label {
+            display: block;
+            font-size: 0.78rem;
+            font-weight: 500;
+            color: #555;
+            margin-bottom: 4px;
+        }
+
+        input[type="month"],
+        input[type="number"],
+        input[type="text"] {
+            width: 100%;
+            padding: 11px 11px;
+            border: 1.5px solid #e8e8e8;
+            border-radius: 10px;
+            font-size: 0.95rem;
+            color: #222;
+            background: #fafafa;
+            transition: border-color 0.18s, box-shadow 0.18s;
+            outline: none;
+            font-family: inherit;
+            height: auto;
+            margin-bottom: 0;
+            -webkit-appearance: none;
+            appearance: none;
+        }
+
+        /* Prevent iOS auto-zoom on input focus (requires font-size >= 16px) */
+        @supports (-webkit-touch-callout: none) {
+            input[type="month"],
+            input[type="number"],
+            input[type="text"] { font-size: 16px; }
+        }
+
+        input[type="month"]:focus,
+        input[type="number"]:focus,
+        input[type="text"]:focus {
+            border-color: #e94560;
+            box-shadow: 0 0 0 3px rgba(233,69,96,0.12);
+            background: #fff;
+        }
+
+        .prev-month-display {
+            width: 100%;
+            padding: 11px 11px;
+            background: #f4f4f4;
+            border: 1.5px solid #e8e8e8;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            color: #888;
+            font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+        .divider { height: 1px; background: #f0f0f0; margin: 4px 0 0; }
+
+        /* ── DYNAMIC ROWS ── */
+        .col-hdr {
+            display: grid;
+            grid-template-columns: 1fr 1fr 40px;
+            gap: 6px;
+            margin-bottom: 4px;
+        }
+        .col-hdr span {
+            font-size: 0.66rem;
+            color: #bbb;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+        }
+
+        .dyn-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr 40px;
+            gap: 6px;
+            align-items: center;
+            margin-bottom: 7px;
+        }
+
+        .btn-del {
+            background: #fee2e2;
+            border: none;
+            color: #ef4444;
+            border-radius: 10px;
+            width: 40px;
+            height: 40px;
+            min-height: 40px;
+            cursor: pointer;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: background 0.15s;
+            line-height: 1;
+            touch-action: manipulation;
+        }
+        .btn-del:hover  { background: #fca5a5; }
+        .btn-del:active { background: #fca5a5; }
+
+        .btn-add {
+            background: none;
+            border: 1.5px solid #e94560;
+            color: #e94560;
+            border-radius: 8px;
+            padding: 6px 12px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            cursor: pointer;
+            font-family: inherit;
+            white-space: nowrap;
+            transition: background 0.15s, color 0.15s;
+            touch-action: manipulation;
+            min-height: 34px;
+        }
+        .btn-add:hover  { background: #e94560; color: #fff; }
+        .btn-add:active { background: #c62a47; color: #fff; border-color: #c62a47; }
+
+        /* ── CALCULATE BUTTON ── */
+        .btn-calculate {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #e94560, #c62a47);
+            color: #fff;
+            border: none;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 20px;
+            font-family: inherit;
+            transition: opacity 0.18s, transform 0.1s;
+            touch-action: manipulation;
+            min-height: 48px;
+        }
+        .btn-calculate:hover  { opacity: 0.9; }
+        .btn-calculate:active { transform: scale(0.99); }
+
+        /* ── RESULT CARD ── */
+        .result-card {
+            display: none;
+            background: #fff;
+            border-radius: 0;
+            box-shadow: none;
+            margin-top: 8px;
+            overflow: hidden;
+        }
+        .result-card.visible { display: block; }
+
+        .result-header {
+            background: linear-gradient(135deg, #e94560, #c62a47);
+            padding: 18px 18px;
+            color: #fff;
+            text-align: center;
+        }
+        .result-header h3 { font-size: 1rem; font-weight: 700; }
+        .result-header .month-tag {
+            display: inline-block;
+            margin-top: 6px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 20px;
+            padding: 3px 12px;
+            font-size: 0.76rem;
+            font-weight: 600;
+        }
+
+        .result-body { padding: 16px 14px 8px; }
+
+        .rs-title {
+            font-size: 0.65rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            color: #bbb;
+            margin: 18px 0 7px;
+        }
+        .rs-title:first-child { margin-top: 0; }
+
+        .result-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            padding: 7px 0;
+            font-size: 0.83rem;
+            border-bottom: 1px solid #f5f5f5;
+            gap: 8px;
+        }
+        .result-row:last-child { border-bottom: none; }
+        .result-row .lbl { color: #777; flex: 1; min-width: 0; }
+        .result-row .val { font-weight: 600; color: #222; flex-shrink: 0; text-align: right; }
+
+        .result-total {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: linear-gradient(135deg, #1a1a2e, #0f3460);
+            color: #fff;
+            border-radius: 12px;
+            padding: 13px 16px;
+            margin-top: 10px;
+            gap: 8px;
+        }
+        .result-total .lbl { font-size: 0.84rem; opacity: 0.88; }
+        .result-total .val { font-size: 1.1rem; font-weight: 700; flex-shrink: 0; }
+
+        /* ── SAVE BUTTON ── */
+        .save-wrap { padding: 14px 14px 20px; }
+
+        .btn-save {
+            width: 100%;
+            padding: 13px;
+            background: #1a1a2e;
+            color: #fff;
+            border: none;
+            border-radius: 12px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: inherit;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: opacity 0.18s;
+            touch-action: manipulation;
+            min-height: 48px;
+        }
+        .btn-save:hover { opacity: 0.82; }
+        .btn-save svg { width: 17px; height: 17px; flex-shrink: 0; }
+
+        /* ── DESKTOP ENHANCEMENTS (480px+) ── */
+        @media (min-width: 480px) {
+            body { padding: 24px 16px 48px; }
+
+            .container { max-width: 680px; margin: 0 auto; }
+
+            .card {
+                border-radius: 24px;
+                box-shadow: 0 24px 64px rgba(0,0,0,0.25);
+            }
+
+            .card-header { padding: 28px 32px 24px; }
+            .card-header h2 { font-size: 1.45rem; }
+            .card-header p  { font-size: 0.875rem; }
+
+            .card-body { padding: 28px 28px 32px; }
+
+            .section-label { font-size: 0.7rem; margin: 22px 0 12px; }
+            .section-hdr   { margin: 22px 0 10px; }
+
+            label { font-size: 0.82rem; margin-bottom: 5px; }
+
+            input[type="month"],
+            input[type="number"],
+            input[type="text"] { padding: 10px 13px; }
+
+            .prev-month-display { padding: 10px 13px; font-size: 0.92rem; }
+
+            .grid-2 { gap: 12px; }
+            .col-hdr { gap: 8px; }
+            .col-hdr span { font-size: 0.72rem; }
+            .dyn-row { gap: 8px; }
+            .form-group { margin-bottom: 12px; }
+
+            .result-card {
+                border-radius: 24px;
+                box-shadow: 0 24px 64px rgba(0,0,0,0.25);
+                margin-top: 22px;
+            }
+
+            .result-header { padding: 22px 28px; }
+            .result-header h3 { font-size: 1.1rem; }
+            .result-header .month-tag { font-size: 0.8rem; }
+
+            .result-body { padding: 24px 28px 8px; }
+
+            .rs-title { font-size: 0.68rem; margin: 20px 0 8px; }
+
+            .result-row { font-size: 0.875rem; }
+
+            .result-total { padding: 14px 18px; }
+            .result-total .lbl { font-size: 0.88rem; }
+            .result-total .val { font-size: 1.18rem; }
+
+            .save-wrap { padding: 20px 28px 28px; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <!-- FORM CARD -->
+    <div class="card">
+        <div class="card-header">
+            <h2>&#9889; Electricity Bill Split</h2>
+            <p>Calculate &amp; split your electricity bill</p>
+        </div>
+        <div class="card-body">
+            <form id="electricityForm">
+
+                <!-- Billing Month -->
+                <p class="section-label">Billing Month</p>
+                <div class="grid-2">
+                    <div class="form-group">
+                        <label for="currentMonthPicker">Current Month</label>
+                        <input type="month" id="currentMonthPicker" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Previous Month</label>
+                        <div class="prev-month-display" id="prevMonthDisplay">&#8212;</div>
+                    </div>
+                </div>
+
+                <div class="divider"></div>
+
+                <!-- M.T Meter Readings -->
+                <p class="section-label">M.T Meter Units</p>
+                <div class="grid-2">
+                    <div class="form-group">
+                        <label for="previousMonthMT">Previous Reading</label>
+                        <input type="number" id="previousMonthMT" placeholder="0" min="0" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="currentMonthMT">Current Reading</label>
+                        <input type="number" id="currentMonthMT" placeholder="0" min="0" required>
+                    </div>
+                </div>
+
+                <!-- U.G Meter Readings -->
+                <p class="section-label">U.G Meter Units</p>
+                <div class="grid-2">
+                    <div class="form-group">
+                        <label for="previousMonthUG">Previous Reading</label>
+                        <input type="number" id="previousMonthUG" placeholder="0" min="0" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="currentMonthUG">Current Reading</label>
+                        <input type="number" id="currentMonthUG" placeholder="0" min="0" required>
+                    </div>
+                </div>
+
+                <div class="divider"></div>
+
+                <!-- Units & Slabs -->
+                <div class="section-hdr">
+                    <span class="section-label">Units &amp; Rates</span>
+                    <button type="button" class="btn-add" onclick="addSlab()">+ Add Slab</button>
+                </div>
+                <div class="col-hdr">
+                    <span>Units</span><span>Rate (&#8377;/unit)</span><span></span>
+                </div>
+                <div id="slabsContainer">
+                    <div class="dyn-row">
+                        <input type="number" name="unitsConsumed" placeholder="0" min="0" step="1">
+                        <input type="number" name="unitRate" placeholder="0.00000" min="0" step="0.00001">
+                        <button type="button" class="btn-del" onclick="removeRow(this)">&#215;</button>
+                    </div>
+                </div>
+
+                <!-- Charges -->
+                <div class="section-hdr">
+                    <span class="section-label">Charges</span>
+                    <button type="button" class="btn-add" onclick="addCharge()">+ Add Charge</button>
+                </div>
+                <div class="col-hdr">
+                    <span>Name</span><span>Amount (&#8377;)</span><span></span>
+                </div>
+                <div id="chargesContainer">
+                    <div class="dyn-row">
+                        <input type="text" name="chargeName" value="Fixed Charge">
+                        <input type="number" name="chargeAmount" placeholder="0.00" step="0.01">
+                        <button type="button" class="btn-del" onclick="removeRow(this)">&#215;</button>
+                    </div>
+                    <div class="dyn-row">
+                        <input type="text" name="chargeName" value="Electricity Duty">
+                        <input type="number" name="chargeAmount" placeholder="0.00" step="0.01">
+                        <button type="button" class="btn-del" onclick="removeRow(this)">&#215;</button>
+                    </div>
+                    <div class="dyn-row">
+                        <input type="text" name="chargeName" value="FPPPA Charge">
+                        <input type="number" name="chargeAmount" placeholder="0.0000" step="0.0001">
+                        <button type="button" class="btn-del" onclick="removeRow(this)">&#215;</button>
+                    </div>
+                </div>
+
+                <!-- Adjustments -->
+                <div class="section-hdr">
+                    <span class="section-label">Adjustments</span>
+                    <button type="button" class="btn-add" onclick="addAdjustment()">+ Add Adjustment</button>
+                </div>
+                <div id="adjColHdr" style="display:none;" class="col-hdr">
+                    <span>Name</span><span>Amount (-500 or 300)</span><span></span>
+                </div>
+                <div id="adjustmentsContainer"></div>
+
+                <button type="submit" class="btn-calculate">Calculate Split</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- RESULT CARD -->
+    <div class="result-card" id="resultCard">
+        <div class="result-header">
+            <h3>&#9889; Electricity Bill Split</h3>
+            <span class="month-tag" id="resultMonthTag"></span>
+        </div>
+        <div class="result-body" id="resultBody"></div>
+        <div class="save-wrap">
+            <button class="btn-save" id="saveBtn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                Save as Image
+            </button>
+        </div>
+    </div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script>
+    // ── Stored bill data for plain export ──
+    var billData = null;
+
+    // ── Month picker ──
+    var picker = document.getElementById('currentMonthPicker');
+    var prevDisplay = document.getElementById('prevMonthDisplay');
+
+    function formatMonth(date) {
+        return date.toLocaleString('default', { month: 'long', year: 'numeric' });
+    }
+
+    function updatePrevMonth() {
+        var val = picker.value;
+        if (!val) { prevDisplay.textContent = '\u2014'; return; }
+        var parts = val.split('-');
+        var y = parseInt(parts[0]), m = parseInt(parts[1]);
+        prevDisplay.textContent = formatMonth(new Date(y, m - 2));
+    }
+
+    var now = new Date();
+    picker.value = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+    updatePrevMonth();
+    picker.addEventListener('change', updatePrevMonth);
+
+    // ── Dynamic row helpers ──
+    function addSlab() {
+        var c = document.getElementById('slabsContainer');
+        var d = document.createElement('div');
+        d.className = 'dyn-row';
+        d.innerHTML = '<input type="number" name="unitsConsumed" placeholder="0" min="0" step="1">' +
+                      '<input type="number" name="unitRate" placeholder="0.00000" min="0" step="0.00001">' +
+                      '<button type="button" class="btn-del" onclick="removeRow(this)">&#215;</button>';
+        c.appendChild(d);
+    }
+
+    function addCharge() {
+        var c = document.getElementById('chargesContainer');
+        var d = document.createElement('div');
+        d.className = 'dyn-row';
+        d.innerHTML = '<input type="text" name="chargeName" placeholder="Charge Name">' +
+                      '<input type="number" name="chargeAmount" placeholder="0.00" step="0.01">' +
+                      '<button type="button" class="btn-del" onclick="removeRow(this)">&#215;</button>';
+        c.appendChild(d);
+    }
+
+    function addAdjustment() {
+        document.getElementById('adjColHdr').style.display = '';
+        var c = document.getElementById('adjustmentsContainer');
+        var d = document.createElement('div');
+        d.className = 'dyn-row';
+        d.innerHTML = '<input type="text" name="adjustmentName" placeholder="Adjustment">' +
+                      '<input type="text" name="adjustmentAmount" placeholder="-500 or 300">' +
+                      '<button type="button" class="btn-del" onclick="removeAdjRow(this)">&#215;</button>';
+        c.appendChild(d);
+    }
+
+    function removeRow(btn) { btn.parentElement.remove(); }
+
+    function removeAdjRow(btn) {
+        btn.parentElement.remove();
+        if (document.getElementById('adjustmentsContainer').children.length === 0) {
+            document.getElementById('adjColHdr').style.display = 'none';
+        }
+    }
+
+    // ── Calculate ──
+    document.getElementById('electricityForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+
+        var val = picker.value;
+        var parts = val.split('-');
+        var y = parseInt(parts[0]), m = parseInt(parts[1]);
+        var currentMonth  = formatMonth(new Date(y, m - 1));
+        var previousMonth = formatMonth(new Date(y, m - 2));
+
+        var prevMT = parseInt(document.getElementById('previousMonthMT').value) || 0;
+        var currMT = parseInt(document.getElementById('currentMonthMT').value)  || 0;
+        var prevUG = parseInt(document.getElementById('previousMonthUG').value) || 0;
+        var currUG = parseInt(document.getElementById('currentMonthUG').value)  || 0;
+        var unitsMT = currMT - prevMT;
+        var unitsUG = currUG - prevUG;
+
+        // Slabs
+        var totalUnitsBill = 0, totalUnits = 0, slabData = [];
+        var uInputs = document.getElementsByName('unitsConsumed');
+        var rInputs = document.getElementsByName('unitRate');
+        for (var i = 0; i < uInputs.length; i++) {
+            var u = parseFloat(uInputs[i].value) || 0;
+            var r = parseFloat(rInputs[i].value) || 0;
+            var amt = u * r;
+            totalUnitsBill += amt;
+            totalUnits += u;
+            slabData.push({ units: u, rate: r, amt: amt });
+        }
+
+        // Charges
+        var totalCharges = 0, chargeData = [];
+        var cnInputs = document.getElementsByName('chargeName');
+        var caInputs = document.getElementsByName('chargeAmount');
+        for (var i = 0; i < cnInputs.length; i++) {
+            var a = parseFloat(caInputs[i].value) || 0;
+            chargeData.push({ name: cnInputs[i].value || 'Charge', amt: a });
+            totalCharges += a;
+        }
+
+        // Adjustments
+        var totalDed = 0, totalExtra = 0, adjData = [];
+        var anInputs = document.getElementsByName('adjustmentName');
+        var aaInputs = document.getElementsByName('adjustmentAmount');
+        for (var i = 0; i < anInputs.length; i++) {
+            var raw = aaInputs[i].value.trim();
+            var aAmt = parseFloat(raw) || 0;
+            if (raw.startsWith('-')) {
+                adjData.push({ name: anInputs[i].value || 'Adjustment', amt: -Math.abs(aAmt) });
+                totalDed += Math.abs(aAmt);
+            } else {
+                adjData.push({ name: anInputs[i].value || 'Adjustment', amt: Math.abs(aAmt) });
+                totalExtra += Math.abs(aAmt);
+            }
+        }
+
+        var effectiveRate = totalUnits > 0 ? totalUnitsBill / totalUnits : 0;
+        var totalMetered = unitsMT + unitsUG;
+        var otherUnits = totalUnits - totalMetered;
+        var otherUnitsCost = otherUnits * effectiveRate;
+        var splitOther = otherUnitsCost / 2;
+        var splitCharges = totalCharges / 2;
+        var netAdj = totalExtra - totalDed;
+        var splitAdj = netAdj / 2;
+
+        var MT_unitsCost = unitsMT * effectiveRate;
+        var UG_unitsCost = unitsUG * effectiveRate;
+        var amtMT = MT_unitsCost + splitOther + splitCharges + splitAdj;
+        var amtUG = UG_unitsCost + splitOther + splitCharges + splitAdj;
+
+        // Store for plain PNG export
+        billData = {
+            currentMonth: currentMonth, previousMonth: previousMonth,
+            prevMT: prevMT, currMT: currMT, unitsMT: unitsMT,
+            prevUG: prevUG, currUG: currUG, unitsUG: unitsUG,
+            slabData: slabData, totalUnitsBill: totalUnitsBill, totalUnits: totalUnits,
+            effectiveRate: effectiveRate,
+            chargeData: chargeData, totalCharges: totalCharges, splitCharges: splitCharges,
+            adjData: adjData, netAdj: netAdj, splitAdj: splitAdj,
+            totalMetered: totalMetered, otherUnits: otherUnits,
+            otherUnitsCost: otherUnitsCost, splitOther: splitOther,
+            MT_unitsCost: MT_unitsCost, UG_unitsCost: UG_unitsCost,
+            amtMT: amtMT, amtUG: amtUG
+        };
+
+        document.getElementById('resultMonthTag').textContent = currentMonth;
+
+        var html = '';
+        html += '<p class="rs-title">M.T Meter</p>';
+        html += row('Previous (' + previousMonth + ')', prevMT + ' units');
+        html += row('Current (' + currentMonth + ')', currMT + ' units');
+        html += row('Consumed', unitsMT + ' units');
+        html += row('Units Amount (' + unitsMT + ' \u00d7 \u20b9' + effectiveRate.toFixed(5) + ')', '\u20b9' + MT_unitsCost.toFixed(2));
+
+        html += '<p class="rs-title">U.G Meter</p>';
+        html += row('Previous (' + previousMonth + ')', prevUG + ' units');
+        html += row('Current (' + currentMonth + ')', currUG + ' units');
+        html += row('Consumed', unitsUG + ' units');
+        html += row('Units Amount (' + unitsUG + ' \u00d7 \u20b9' + effectiveRate.toFixed(5) + ')', '\u20b9' + UG_unitsCost.toFixed(2));
+
+        html += '<p class="rs-title">Units &amp; Rates</p>';
+        slabData.forEach(function(s) {
+            html += row(s.units + ' units \u00d7 \u20b9' + s.rate, '\u20b9' + s.amt.toFixed(2));
+        });
+        html += row('Total Units', totalUnits + ' units');
+        html += row('Total Units Cost', '\u20b9' + totalUnitsBill.toFixed(2));
+        html += row('Effective Rate', '\u20b9' + effectiveRate.toFixed(5) + '/unit');
+
+        html += '<p class="rs-title">Other Units Split</p>';
+        html += row('M.T + U.G Units', totalMetered + ' units');
+        html += row('Total Billed Units', totalUnits + ' units');
+        html += row('Other Units', otherUnits + ' units');
+        html += row('Other Cost (' + otherUnits + ' \u00d7 \u20b9' + effectiveRate.toFixed(5) + ')', '\u20b9' + otherUnitsCost.toFixed(2));
+        html += row('Each Share (\u00f7 2)', '\u20b9' + splitOther.toFixed(2));
+
+        if (chargeData.length > 0) {
+            html += '<p class="rs-title">Charges Split</p>';
+            chargeData.forEach(function(c) {
+                var cSign = c.amt < 0 ? '-\u20b9' : '\u20b9';
+                html += row(c.name, cSign + Math.abs(c.amt).toFixed(2));
+            });
+            html += row('Total Charges', (totalCharges < 0 ? '-\u20b9' : '\u20b9') + Math.abs(totalCharges).toFixed(2));
+            html += row('Each Share (\u00f7 2)', (splitCharges < 0 ? '-\u20b9' : '\u20b9') + Math.abs(splitCharges).toFixed(2));
+        }
+
+        if (adjData.length > 0) {
+            html += '<p class="rs-title">Adjustments</p>';
+            adjData.forEach(function(a) {
+                var sign = a.amt < 0 ? '-\u20b9' : '+\u20b9';
+                html += row(a.name, sign + Math.abs(a.amt).toFixed(2));
+            });
+            html += row('Net Adjustment Each Share', (netAdj >= 0 ? '+\u20b9' : '-\u20b9') + Math.abs(splitAdj).toFixed(2));
+        }
+
+        html += '<p class="rs-title" style="margin-top:20px;">M.T \u2014 Payable Amount</p>';
+        html += row('Units Amount', '\u20b9' + MT_unitsCost.toFixed(2));
+        html += row('+ Other Share', '\u20b9' + splitOther.toFixed(2));
+        html += row('+ Charges Share', '\u20b9' + splitCharges.toFixed(2));
+        if (adjData.length > 0) html += row((netAdj >= 0 ? '+' : '\u2212') + ' Adjustment Share', '\u20b9' + Math.abs(splitAdj).toFixed(2));
+        html += '<div class="result-total"><span class="lbl">M.T Total Payable</span><span class="val">\u20b9' + amtMT.toFixed(2) + '</span></div>';
+
+        html += '<p class="rs-title" style="margin-top:20px;">U.G \u2014 Payable Amount</p>';
+        html += row('Units Amount', '\u20b9' + UG_unitsCost.toFixed(2));
+        html += row('+ Other Share', '\u20b9' + splitOther.toFixed(2));
+        html += row('+ Charges Share', '\u20b9' + splitCharges.toFixed(2));
+        if (adjData.length > 0) html += row((netAdj >= 0 ? '+' : '\u2212') + ' Adjustment Share', '\u20b9' + Math.abs(splitAdj).toFixed(2));
+        html += '<div class="result-total"><span class="lbl">U.G Total Payable</span><span class="val">\u20b9' + amtUG.toFixed(2) + '</span></div>';
+
+        document.getElementById('resultBody').innerHTML = html;
+
+        var resultCard = document.getElementById('resultCard');
+        resultCard.classList.add('visible');
+        resultCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+
+    function row(lbl, val) {
+        return '<div class="result-row"><span class="lbl">' + lbl + '</span><span class="val">' + val + '</span></div>';
+    }
+
+    // ── Save PNG (plain black & white bill) ──
+    document.getElementById('saveBtn').addEventListener('click', function() {
+        if (!billData) return;
+        var d = billData;
+        var today = new Date().toLocaleDateString('en-GB');
+
+        var tbl = function(head, body) {
+            return '<table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:13px;">' +
+                   '<tr>' + head.map(function(h){ return '<th style="border:1px solid #000;padding:5px;background:#f0f0f0;text-align:left;">' + h + '</th>'; }).join('') + '</tr>' +
+                   body + '</table>';
+        };
+        var tr = function(cells, bold) {
+            return '<tr>' + cells.map(function(c){ return '<td style="border:1px solid #000;padding:5px;' + (bold ? 'font-weight:bold;' : '') + '">' + c + '</td>'; }).join('') + '</tr>';
+        };
+        var sec = function(title) { return '<p style="font-weight:bold;margin:14px 0 4px;font-size:13px;border-bottom:1px solid #000;padding-bottom:3px;">' + title + '</p>'; };
+
+        var html = '<div style="font-family:Arial,monospace;color:#000;background:#fff;padding:20px;width:480px;">';
+
+        // Title
+        html += '<div style="text-align:center;font-size:17px;font-weight:bold;text-decoration:underline;margin-bottom:8px;">ELECTRICITY BILL SPLIT</div>';
+        html += '<p style="font-size:12px;margin:2px 0;">Date: ' + today + '</p>';
+        html += '<p style="font-size:12px;margin:2px 0 10px;">Period: ' + d.previousMonth + ' &rarr; ' + d.currentMonth + '</p>';
+
+        // Meter readings
+        html += sec('Meter Readings');
+        html += tbl(['Meter','Prev','Curr','Consumed'],
+            tr(['M.T', d.prevMT, d.currMT, d.unitsMT + ' units']) +
+            tr(['U.G', d.prevUG, d.currUG, d.unitsUG + ' units'])
+        );
+
+        // Slabs
+        html += sec('Units & Rates');
+        var slabRows = d.slabData.map(function(s){ return tr([s.units + ' units', '\u20b9' + s.rate, '\u20b9' + s.amt.toFixed(2)]); }).join('');
+        slabRows += tr(['Total: ' + d.totalUnits + ' units', 'Eff. Rate: \u20b9' + d.effectiveRate.toFixed(5), '\u20b9' + d.totalUnitsBill.toFixed(2)], true);
+        html += tbl(['Units','Rate','Amount'], slabRows);
+
+        // Other units
+        html += sec('Other Units Split');
+        html += tbl(['Description','Value'],
+            tr(['M.T + U.G units', d.totalMetered + ' units']) +
+            tr(['Total billed units', d.totalUnits + ' units']) +
+            tr(['Other units', d.otherUnits + ' units']) +
+            tr(['Other cost (' + d.otherUnits + ' \u00d7 \u20b9' + d.effectiveRate.toFixed(5) + ')', '\u20b9' + d.otherUnitsCost.toFixed(2)]) +
+            tr(['Each share (\u00f7 2)', '\u20b9' + d.splitOther.toFixed(2)], true)
+        );
+
+        // Charges
+        if (d.chargeData.length > 0) {
+            html += sec('Charges');
+            var chRows = d.chargeData.map(function(c){
+                var sign = c.amt < 0 ? '-\u20b9' : '\u20b9';
+                return tr([c.name, sign + Math.abs(c.amt).toFixed(2)]);
+            }).join('');
+            var tcSign = d.totalCharges < 0 ? '-\u20b9' : '\u20b9';
+            chRows += tr(['Total', tcSign + Math.abs(d.totalCharges).toFixed(2)], true);
+            chRows += tr(['Each share (\u00f7 2)', (d.splitCharges < 0 ? '-\u20b9' : '\u20b9') + Math.abs(d.splitCharges).toFixed(2)], true);
+            html += tbl(['Charge','Amount'], chRows);
+        }
+
+        // Adjustments
+        if (d.adjData.length > 0) {
+            html += sec('Adjustments');
+            var adjRows = d.adjData.map(function(a){
+                return tr([a.name, (a.amt < 0 ? '-\u20b9' : '+\u20b9') + Math.abs(a.amt).toFixed(2)]);
+            }).join('');
+            adjRows += tr(['Net adjustment each share', (d.netAdj >= 0 ? '+\u20b9' : '-\u20b9') + Math.abs(d.splitAdj).toFixed(2)], true);
+            html += tbl(['Adjustment','Amount'], adjRows);
+        }
+
+        // Final split
+        html += sec('Final Split');
+        html += tbl(['','M.T Payable','U.G Payable'],
+            tr(['Amount', '\u20b9' + d.amtMT.toFixed(2), '\u20b9' + d.amtUG.toFixed(2)], true)
+        );
+
+        html += '</div>';
+
+        // Build off-screen element, capture, remove
+        var wrap = document.createElement('div');
+        wrap.style.cssText = 'position:fixed;left:-9999px;top:0;';
+        wrap.innerHTML = html;
+        document.body.appendChild(wrap);
+
+        html2canvas(wrap, { scale: 2, backgroundColor: '#ffffff', useCORS: true }).then(function(canvas) {
+            document.body.removeChild(wrap);
+            var link = document.createElement('a');
+            link.download = 'electricity-bill-' + picker.value + '.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }).catch(function() { document.body.removeChild(wrap); });
+    });
+</script>
+</body>
+</html>

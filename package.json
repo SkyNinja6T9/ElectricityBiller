@@ -1,0 +1,21 @@
+{
+  "name": "electricity-bill-splitter",
+  "version": "1.0.0",
+  "description": "Lightweight Electricity Bill Splitter WebApp with OCR Space API and dynamic multi-party splitting",
+  "main": "server.js",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js",
+    "test": "node -e \"console.log('App ready')\""
+  },
+  "keywords": [
+    "electricity-bill",
+    "bill-splitter",
+    "ocr",
+    "ocr-space",
+    "vercel",
+    "serverless"
+  ],
+  "author": "",
+  "license": "MIT"
+}

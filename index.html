@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>⚡ Electricity Bill Splitter — Multi-Party & OCR</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<!-- ── CLOSED USER ACCESS GATE MODAL ── -->
+<div class="access-modal-overlay" id="accessGateModal">
+  <div class="access-modal-box">
+    <div class="access-icon">🔒</div>
+    <h3 class="access-title">Closed User Access</h3>
+    <p class="access-subtitle">This webapp is restricted to authorized party members. Enter your passcode to continue.</p>
+    <div class="access-input-wrap">
+      <input type="password" id="passcodeInput" class="access-input" placeholder="••••" maxlength="10" autofocus>
+      <div class="access-error" id="gateError"></div>
+    </div>
+    <button type="button" class="btn-unlock" id="unlockBtn">Unlock Webapp</button>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- ── FORM CARD ── -->
+  <div class="card">
+    <div class="card-header">
+      <div class="top-bar">
+        <div class="badge-auth" id="userStatusBadge" style="display:none;">
+          <span>🔒 Authorized Session</span>
+        </div>
+        <button type="button" class="btn-lock" id="logoutBtn" title="Lock Webapp">Lock 🔐</button>
+      </div>
+      <h2>⚡ Electricity Bill Splitter</h2>
+      <p>Scan your electricity bill &amp; split precisely by number of parties</p>
+    </div>
+
+    <div class="card-body">
+
+      <!-- ── OCR BILL UPLOAD SECTION ── -->
+      <div class="section-label">
+        <span>📸 Upload &amp; Scan Electricity Bill (OCR Space)</span>
+      </div>
+
+      <div class="ocr-upload-card" id="dropZone">
+        <div class="upload-icon">📄</div>
+        <div class="upload-title">Drop your electricity bill here</div>
+        <div class="upload-desc">Supports JPG, PNG, PDF bills. Auto-extracts readings, rates &amp; charges.</div>
+
+        <input type="file" id="billFileInput" accept="image/jpeg,image/png,image/webp,application/pdf" style="display:none;">
+        <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none;">
+
+        <div class="upload-actions">
+          <label for="billFileInput" class="btn-file-select">📁 Choose File</label>
+          <label for="cameraInput" class="btn-file-select">📷 Take Photo</label>
+          <button type="button" class="btn-scan" id="scanBtn" disabled>⚡ Scan with OCR</button>
+        </div>
+
+        <img id="previewThumb" class="preview-thumb" alt="Bill Preview">
+        <div class="ocr-status" id="ocrStatus"></div>
+
+        <details class="raw-text-card" id="rawTextContainer" style="display:none;">
+          <summary>🔍 View Recognized OCR Text</summary>
+          <pre class="raw-text-pre" id="rawTextContent"></pre>
+        </details>
+      </div>
+
+      <form id="electricityForm">
+
+        <!-- ── BILLING MONTH ── -->
+        <p class="section-label">Billing Month</p>
+        <div class="grid-2">
+          <div class="form-group">
+            <label for="currentMonthPicker">Current Month</label>
+            <input type="month" id="currentMonthPicker" required>
+          </div>
+          <div class="form-group">
+            <label>Previous Month</label>
+            <div class="prev-month-display" id="prevMonthDisplay">—</div>
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- ── DYNAMIC PARTIES SECTION ── -->
+        <div class="section-hdr">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span class="section-label">Party Sub-Meters</span>
+            <span class="badge-count" id="partyCountBadge">2 Parties</span>
+          </div>
+          <div style="display:flex; gap:6px;">
+            <button type="button" class="btn-add" onclick="rolloverReadings()" title="Copy Curr to Prev for new billing cycle">🔄 New Month</button>
+            <button type="button" class="btn-add" onclick="addParty()">+ Add Party</button>
+          </div>
+        </div>
+
+        <div id="partiesContainer">
+          <!-- Populated dynamically via JS -->
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- ── UNITS & SLAB RATES ── -->
+        <div class="section-hdr">
+          <span class="section-label">Units &amp; Slabs (From Main Bill)</span>
+          <button type="button" class="btn-add" onclick="addSlab()">+ Add Slab</button>
+        </div>
+        <div class="col-hdr">
+          <span>Units</span><span>Rate (₹/unit)</span><span></span>
+        </div>
+        <div id="slabsContainer">
+          <div class="dyn-row">
+            <input type="number" name="unitsConsumed" placeholder="0" min="0" step="1">
+            <input type="number" name="unitRate" placeholder="0.00000" min="0" step="0.00001">
+            <button type="button" class="btn-del" onclick="removeRow(this)">×</button>
+          </div>
+        </div>
+
+        <!-- ── CHARGES ── -->
+        <div class="section-hdr">
+          <span class="section-label">Charges &amp; Taxes</span>
+          <button type="button" class="btn-add" onclick="addCharge()">+ Add Charge</button>
+        </div>
+        <div class="col-hdr">
+          <span>Name</span><span>Amount (₹)</span><span></span>
+        </div>
+        <div id="chargesContainer">
+          <div class="dyn-row">
+            <input type="text" name="chargeName" value="Fixed Charge">
+            <input type="number" name="chargeAmount" placeholder="0.00" step="0.01">
+            <button type="button" class="btn-del" onclick="removeRow(this)">×</button>
+          </div>
+          <div class="dyn-row">
+            <input type="text" name="chargeName" value="Electricity Duty">
+            <input type="number" name="chargeAmount" placeholder="0.00" step="0.01">
+            <button type="button" class="btn-del" onclick="removeRow(this)">×</button>
+          </div>
+          <div class="dyn-row">
+            <input type="text" name="chargeName" value="FPPPA Charge">
+            <input type="number" name="chargeAmount" placeholder="0.00" step="0.01">
+            <button type="button" class="btn-del" onclick="removeRow(this)">×</button>
+          </div>
+        </div>
+
+        <!-- ── ADJUSTMENTS ── -->
+        <div class="section-hdr">
+          <span class="section-label">Adjustments / Rebates</span>
+          <button type="button" class="btn-add" onclick="addAdjustment()">+ Add Adjustment</button>
+        </div>
+        <div id="adjColHdr" style="display:none;" class="col-hdr">
+          <span>Name</span><span>Amount (-500 or +300)</span><span></span>
+        </div>
+        <div id="adjustmentsContainer"></div>
+
+        <button type="submit" class="btn-calculate">⚡ Calculate Multi-Party Split</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ── RESULT CARD ── -->
+  <div class="result-card" id="resultCard">
+    <div class="result-header">
+      <h3>⚡ Electricity Bill Split Summary</h3>
+      <span class="month-tag" id="resultMonthTag"></span>
+    </div>
+    <div class="result-body" id="resultBody"></div>
+
+    <div class="save-wrap">
+      <button class="btn-whatsapp" id="copyWhatsappBtn" type="button">
+        <span>📲 Copy WhatsApp Summary</span>
+      </button>
+      <button class="btn-save" id="saveBtn" type="button">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/>
+          <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        <span>Save as Image</span>
+      </button>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── SCRIPTS ── -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="/js/auth-client.js"></script>
+<script src="/js/ocr-client.js"></script>
+<script src="/js/app.js"></script>
+</body>
+</html>
