@@ -348,6 +348,7 @@ if (scanBtn) {
       if (ext.billingMonth) summaryPills += `📅 Month: <strong>${ext.billingMonth}</strong> &nbsp;•&nbsp; `;
       if (ext.meter && ext.meter.unitsConsumed) summaryPills += `⚡ Units: <strong>${ext.meter.unitsConsumed}</strong> (${ext.meter.previousReading || 0} → ${ext.meter.currentReading || 0}) &nbsp;•&nbsp; `;
       if (ext.slabs && ext.slabs.length > 0) summaryPills += `📊 Slabs: <strong>${ext.slabs.length}</strong> &nbsp;•&nbsp; `;
+      if (ext.adjustments && ext.adjustments.length > 0) summaryPills += `🎁 Adjustments: <strong>${ext.adjustments.length}</strong> &nbsp;•&nbsp; `;
       if (ext.totalAmount) summaryPills += `💰 Net Bill: <strong>₹${ext.totalAmount}</strong>`;
 
       ocrStatus.className = 'ocr-status visible success';

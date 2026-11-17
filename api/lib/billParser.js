@@ -1,7 +1,7 @@
 /**
  * Advanced Electricity Bill Parser for OCR output
- * Handles single-line key-values AND multi-line column alignments (common in OCR)
- * Supports UGVCL, DGVCL, MGVCL, PGVCL, Torrent Power, APDCL, BESCOM, TNEB, MSEDCL, BSES, Tata Power, etc.
+ * Extracts dates, units, meter readings, slabs, charges, and ALL adjustments (including end-of-bill adjustments)
+ * Supports APDCL, UGVCL, DGVCL, MGVCL, PGVCL, Torrent Power, BESCOM, TNEB, MSEDCL, BSES, Tata Power, etc.
  */
 
 function parseElectricityBill(rawText) {
@@ -25,8 +25,8 @@ function parseElectricityBill(rawText) {
       unitsConsumed: null,
     },
     slabs: [],                // [{ units: 300, rate: 7.74, amt: 2322 }]
-    charges: [],              // [{ name: 'Fixed Charge', amt: 552.33 }]
-    adjustments: [],          // [{ name: 'Tariff Subsidy', amt: -455.0 }]
+    charges: [],              // [{ name: 'Fixed Charge', amt: 552.33 }, ...]
+    adjustments: [],          // [{ name: 'Total Tariff Subsidy', amt: -455 }, { name: 'Adjustment', amt: -1297.92 }]
     totalAmount: null,
     confidence: [],
     rawText: rawText
@@ -39,9 +39,45 @@ function parseElectricityBill(rawText) {
     return isNaN(val) ? null : val;
   };
 
+  // Helper to extract key-value pairs (handles both same-line and two-line OCR formats)
+  const extractAllKeyValuePairs = () => {
+    const pairs = [];
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+
+      // Format 1: "Adjustment = -1297.92" or "Fixed Charge: 552.33"
+      const sameLine = line.match(/^([^=：:0-9][^=：:]*?)[=：:]\s*(-?[0-9,]+(?:\.[0-9]+)?)$/);
+      if (sameLine && isNaN(sameLine[1].trim())) {
+        const valStr = sameLine[2].trim();
+        pairs.push({
+          key: sameLine[1].trim(),
+          valStr: valStr,
+          val: parseFloat(valStr.replace(/,/g, ''))
+        });
+        continue;
+      }
+
+      // Format 2: Line i is label, Line i+1 is "= -1297.92" or "-1297.92"
+      if (i + 1 < lines.length) {
+        const nextLine = lines[i + 1];
+        const nextMatch = nextLine.match(/^[=：:\s]*(-?[0-9,]+(?:\.[0-9]+)?)$/);
+        if (nextMatch && !/^[=：:\s0-9]/.test(line)) {
+          const valStr = nextMatch[1].trim();
+          pairs.push({
+            key: line.trim(),
+            valStr: valStr,
+            val: parseFloat(valStr.replace(/,/g, ''))
+          });
+          i++; // skip next line
+        }
+      }
+    }
+    return pairs;
+  };
+
+  const kvPairs = extractAllKeyValuePairs();
+
   // ── 1. BILLING MONTH & DATES ──
-  // Look for Bill Date / Bill To / Bill Month
-  // Patterns like "Bill Date : 2025-10-03" or "2025-10-01" or "12/03/2026"
   const dateRegex = /\b(?:bill\s*(?:date|month|to|period)|date)\s*[:：=\-]?\s*(\d{4}[-\/]\d{1,2}[-\/]\d{1,2}|\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4}|[a-zA-Z]{3,9}\s*\d{4})\b/i;
   const matchDate = cleanText.match(dateRegex);
 
@@ -58,13 +94,11 @@ function parseElectricityBill(rawText) {
 
   if (matchDate) {
     const rawD = matchDate[1];
-    // Check YYYY-MM-DD
     const ymd = rawD.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})$/);
     if (ymd) {
       setMonthFromYearAndMonth(parseInt(ymd[1], 10), parseInt(ymd[2], 10));
       result.confidence.push(`Found Bill Date: ${rawD} -> ${result.billingMonth}`);
     } else {
-      // Check DD/MM/YYYY
       const dmy = rawD.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{2,4})$/);
       if (dmy) {
         let y = parseInt(dmy[3], 10);
@@ -75,9 +109,7 @@ function parseElectricityBill(rawText) {
     }
   }
 
-  // Fallback date scan if not found
   if (!result.billingMonth) {
-    // Look for any YYYY-MM-DD or DD-MM-YYYY in the document
     const anyDateRegex = /\b(\d{4})[-\/](\d{2})[-\/](\d{2})\b/g;
     let anyMatch;
     while ((anyMatch = anyDateRegex.exec(cleanText)) !== null) {
@@ -89,48 +121,29 @@ function parseElectricityBill(rawText) {
   }
 
   // ── 2. METER READINGS & UNITS ──
-  // Check direct line matches first: e.g. "Current Reading = 34459.0" or "Units Billed = 671.0"
-  lines.forEach(line => {
-    const mCurr = line.match(/\b(?:curr(?:ent)?\s*(?:reading|rdg|read)?|present\s*reading)\s*[:：=\-]?\s*([0-9]+(?:\.[0-9]+)?)\b/i);
-    if (mCurr && result.meter.currentReading == null) {
-      result.meter.currentReading = parseFloat(mCurr[1]);
+  kvPairs.forEach(p => {
+    if (result.meter.currentReading == null && /curr(?:ent)?\s*(?:reading|rdg|read)?|present\s*reading/i.test(p.key)) {
+      result.meter.currentReading = p.val;
     }
-
-    const mPrev = line.match(/\b(?:prev(?:ious)?\s*(?:reading|rdg|read)?|past\s*reading)\s*[:：=\-]?\s*([0-9]+(?:\.[0-9]+)?)\b/i);
-    if (mPrev && result.meter.previousReading == null) {
-      result.meter.previousReading = parseFloat(mPrev[1]);
+    if (result.meter.previousReading == null && /prev(?:ious)?\s*(?:reading|rdg|read)?|past\s*reading/i.test(p.key)) {
+      result.meter.previousReading = p.val;
     }
-
-    const mUnits = line.match(/\b(?:units?\s*(?:consumed|billed|total)|consumed\s*units?|total\s*units?|billed\s*units?)\s*[:：=\-]?\s*([0-9]+(?:\.[0-9]+)?)\b/i);
-    if (mUnits && result.meter.unitsConsumed == null) {
-      result.meter.unitsConsumed = parseFloat(mUnits[1]);
+    if (result.meter.unitsConsumed == null && /units?\s*(?:consumed|billed|total)|consumed\s*units?|billed\s*units?/i.test(p.key)) {
+      result.meter.unitsConsumed = p.val;
     }
   });
 
-  // Handle OCR Column Split Block:
-  // Label lines: "Current Reading", "Previous Reading", "Units Consumed"
-  // Followed by value lines: "= 34459.0", "= 33788.0", "= 671.0"
-  if (result.meter.currentReading == null || result.meter.previousReading == null) {
-    for (let i = 0; i < lines.length - 2; i++) {
-      if (/current\s*reading/i.test(lines[i]) && /previous\s*reading/i.test(lines[i + 1])) {
-        // Look ahead for the values block (starting with = or numbers)
-        for (let j = i + 2; j < Math.min(i + 10, lines.length - 1); j++) {
-          const val1 = lines[j].match(/^[=:：\s]*([0-9]{3,8}(?:\.[0-9]+)?)$/);
-          const val2 = lines[j + 1].match(/^[=:：\s]*([0-9]{3,8}(?:\.[0-9]+)?)$/);
-          if (val1 && val2) {
-            result.meter.currentReading = parseFloat(val1[1]);
-            result.meter.previousReading = parseFloat(val2[1]);
-            if (lines[j + 2]) {
-              const val3 = lines[j + 2].match(/^[=:：\s]*([0-9]+(?:\.[0-9]+)?)$/);
-              if (val3) result.meter.unitsConsumed = parseFloat(val3[1]);
-            }
-            break;
-          }
-        }
-        break;
-      }
-    }
-  }
+  // Direct line regex fallback for meter readings
+  lines.forEach(line => {
+    const mCurr = line.match(/\b(?:curr(?:ent)?\s*(?:reading|rdg|read)?|present\s*reading)\s*[:：=\-]?\s*([0-9]+(?:\.[0-9]+)?)\b/i);
+    if (mCurr && result.meter.currentReading == null) result.meter.currentReading = parseFloat(mCurr[1]);
+
+    const mPrev = line.match(/\b(?:prev(?:ious)?\s*(?:reading|rdg|read)?|past\s*reading)\s*[:：=\-]?\s*([0-9]+(?:\.[0-9]+)?)\b/i);
+    if (mPrev && result.meter.previousReading == null) result.meter.previousReading = parseFloat(mPrev[1]);
+
+    const mUnits = line.match(/\b(?:units?\s*(?:consumed|billed|total)|consumed\s*units?|total\s*units?|billed\s*units?)\s*[:：=\-]?\s*([0-9]+(?:\.[0-9]+)?)\b/i);
+    if (mUnits && result.meter.unitsConsumed == null) result.meter.unitsConsumed = parseFloat(mUnits[1]);
+  });
 
   if (result.meter.unitsConsumed == null && result.meter.currentReading != null && result.meter.previousReading != null) {
     result.meter.unitsConsumed = Math.max(0, Math.round((result.meter.currentReading - result.meter.previousReading) * 100) / 100);
@@ -141,8 +154,6 @@ function parseElectricityBill(rawText) {
   if (result.meter.unitsConsumed != null) result.confidence.push('Found Units Consumed: ' + result.meter.unitsConsumed);
 
   // ── 3. SLABS (Units & Rates) ──
-  // Format 1: "300.0 X 7.74" or "200.0 X 7.74 = 1548.0"
-  // Format 2: "1-50 units @ 3.05 = 152.50"
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (/\b(?:date|due|phone|consumer|bill\s*no|meter\s*no|connected|kva)\b/i.test(line)) {
@@ -167,77 +178,25 @@ function parseElectricityBill(rawText) {
     result.confidence.push(`Found ${result.slabs.length} rate slab(s)`);
   }
 
-  // ── 4. CHARGES (Fixed Charge, Duty, FPPPA, Meter Rent) ──
-  const chargeKeywords = [
+  // ── 4. CHARGES (Fixed Charge, Duty, FPPPA, Surcharges) ──
+  const chargeDefs = [
     { name: 'Fixed Charge', regex: /\bfixed\s*(?:charges?|fee|amt)|demand\s*charges?\b/i },
     { name: 'Electricity Duty', regex: /\belectricity\s*duty|govt\.?\s*duty|\bed\s*duty\b/i },
     { name: 'FPPPA Charge', regex: /\bfpppa(?:\s*charges?)?|fuel\s*(?:surcharge|adjustment)\b/i },
-    { name: 'Meter Rent', regex: /\bmeter\s*(?:rent|charges?)\b/i },
-    { name: 'Current Surcharge', regex: /\bcurrent\s*surcharge\b/i }
+    { name: 'Current Surcharge', regex: /\bcurrent\s*surcharge|surcharge\b/i },
+    { name: 'Meter Rent', regex: /\bmeter\s*(?:rent|charges?)\b/i }
   ];
 
-  // Try direct line match first: "Fixed Charge = 552.33"
-  lines.forEach(line => {
-    chargeKeywords.forEach(ck => {
-      const directMatch = line.match(new RegExp(`(?:${ck.regex.source})\\s*[:：=\\-]?\\s*(?:₹|rs\\.?)?\\s*([0-9]+(?:\\.[0-9]{1,2})?)`, 'i'));
-      if (directMatch) {
-        const amt = parseFloat(directMatch[1]);
-        if (!isNaN(amt) && amt > 0 && !result.charges.some(c => c.name === ck.name)) {
-          result.charges.push({ name: ck.name, amt });
-          result.confidence.push(`Found ${ck.name}: ₹${amt}`);
-        }
+  kvPairs.forEach(p => {
+    chargeDefs.forEach(cd => {
+      if (cd.regex.test(p.key) && p.val > 0 && !result.charges.some(c => c.name === cd.name)) {
+        result.charges.push({ name: cd.name, amt: p.val });
+        result.confidence.push(`Found ${cd.name}: ₹${p.val}`);
       }
     });
   });
 
-  // If charges not found via direct line, look for tabular column blocks:
-  // Labels block followed by values block with =
-  if (result.charges.length === 0) {
-    for (let i = 0; i < lines.length - 3; i++) {
-      if (/energy\s*amount|fixed\s*charge/i.test(lines[i])) {
-        // Collect labels
-        const labelList = [];
-        let j = i;
-        while (j < lines.length && !lines[j].startsWith('=') && !/^[0-9]/.test(lines[j]) && labelList.length < 12) {
-          labelList.push({ lineIndex: j, text: lines[j] });
-          j++;
-        }
-
-        // Collect corresponding values
-        const valueList = [];
-        while (j < lines.length && (lines[j].startsWith('=') || lines[j].startsWith('：') || /^[0-9]/.test(lines[j])) && valueList.length < labelList.length) {
-          const valMatch = lines[j].match(/[=：:\s]*(-?[0-9]+(?:\.[0-9]+)?)/);
-          if (valMatch) {
-            valueList.push(parseFloat(valMatch[1]));
-          }
-          j++;
-        }
-
-        // Map label to value
-        labelList.forEach((lbl, idx) => {
-          if (idx < valueList.length) {
-            const val = valueList[idx];
-            chargeKeywords.forEach(ck => {
-              if (ck.regex.test(lbl.text) && val > 0 && !result.charges.some(c => c.name === ck.name)) {
-                result.charges.push({ name: ck.name, amt: val });
-                result.confidence.push(`Found ${ck.name}: ₹${val}`);
-              }
-            });
-
-            // Check if subsidy / adjustment
-            if (/subsidy|rebate|discount/i.test(lbl.text) && Math.abs(val) > 0) {
-              const adjAmt = -Math.abs(val);
-              result.adjustments.push({ name: lbl.text.trim(), amt: adjAmt });
-              result.confidence.push(`Found Adjustment ${lbl.text}: ₹${adjAmt}`);
-            }
-          }
-        });
-        break;
-      }
-    }
-  }
-
-  // Ensure default charges structure
+  // Ensure default charges exist if none found
   if (result.charges.length === 0) {
     result.charges = [
       { name: 'Fixed Charge', amt: 0 },
@@ -246,26 +205,93 @@ function parseElectricityBill(rawText) {
     ];
   }
 
-  // ── 5. ADJUSTMENTS / SUBSIDIES ──
-  const adjKeywords = [
-    { name: 'Tariff Subsidy', regex: /\btariff\s*subsidy|govt\.?\s*subsidy|subsidy\b/i, isDeduction: true },
-    { name: 'Rebate', regex: /\bprompt\s*payment\s*rebate|rebate|discount\b/i, isDeduction: true },
-    { name: 'Arrear', regex: /\bprincipal\s*arrear|arrears?|past\s*dues?\b/i, isDeduction: false }
-  ];
+  // ── 5. ADJUSTMENTS (All Adjustments, End-of-Bill Adjustments, Subsidies & Arrears) ──
+  // Check kvPairs for adjustments
+  kvPairs.forEach(p => {
+    const key = p.key.trim();
+    const val = p.val;
+    const valStr = p.valStr || '';
 
-  lines.forEach(line => {
-    adjKeywords.forEach(ak => {
-      const m = line.match(new RegExp(`(?:${ak.regex.source})\\s*[:：=\\-]?\\s*(?:₹|rs\\.?)?\\s*(-?[0-9]+(?:\\.[0-9]{1,2})?)`, 'i'));
-      if (m) {
-        const amt = parseFloat(m[1]);
-        if (!isNaN(amt) && Math.abs(amt) > 0 && !result.adjustments.some(a => a.name === ak.name)) {
-          const finalAmt = ak.isDeduction ? -Math.abs(amt) : Math.abs(amt);
-          result.adjustments.push({ name: ak.name, amt: finalAmt });
-          result.confidence.push(`Found Adjustment ${ak.name}: ${finalAmt < 0 ? '-' : '+'}₹${Math.abs(finalAmt)}`);
-        }
+    // A. End-of-Bill Adjustment (e.g. "Adjustment = -1297.92" or "Adjustment = 300")
+    if (/^adjustment(?:s)?$/i.test(key) || /^bill\s*adjustment(?:s)?$/i.test(key)) {
+      if (Math.abs(val) > 0 && !result.adjustments.some(a => a.name.toLowerCase() === key.toLowerCase())) {
+        result.adjustments.push({ name: 'Bill Adjustment', amt: val });
+        result.confidence.push(`Found Bill Adjustment: ${val < 0 ? '-' : '+'}₹${Math.abs(val)}`);
       }
-    });
+      return;
+    }
+
+    // B. Tariff / Govt Subsidies (e.g. "Total Tariff Subsidy = -455.0")
+    if (/subsidy/i.test(key)) {
+      if (Math.abs(val) > 0 && !result.adjustments.some(a => a.name.toLowerCase() === key.toLowerCase())) {
+        const finalVal = -Math.abs(val); // Subsidies are always deductions
+        result.adjustments.push({ name: key, amt: finalVal });
+        result.confidence.push(`Found Subsidy ${key}: -₹${Math.abs(finalVal)}`);
+      }
+      return;
+    }
+
+    // C. Rebates / Discounts (e.g. "Prompt Payment Rebate = -25.0")
+    if (/rebate|discount/i.test(key)) {
+      if (Math.abs(val) > 0 && !result.adjustments.some(a => a.name.toLowerCase() === key.toLowerCase())) {
+        const finalVal = -Math.abs(val);
+        result.adjustments.push({ name: key, amt: finalVal });
+        result.confidence.push(`Found Rebate ${key}: -₹${Math.abs(finalVal)}`);
+      }
+      return;
+    }
+
+    // D. Solar Credits / Net Metering Credit
+    if (/solar|net\s*metering/i.test(key)) {
+      if (Math.abs(val) > 0 && !result.adjustments.some(a => a.name.toLowerCase() === key.toLowerCase())) {
+        const finalVal = -Math.abs(val);
+        result.adjustments.push({ name: key, amt: finalVal });
+        result.confidence.push(`Found Solar Credit ${key}: -₹${Math.abs(finalVal)}`);
+      }
+      return;
+    }
+
+    // E. Arrears & Past Dues (e.g. "Principal Arrear = 500.0")
+    if (/principal\s*arrear|arrears?|past\s*dues?|previous\s*dues?/i.test(key)) {
+      if (val > 0 && !result.adjustments.some(a => a.name.toLowerCase() === key.toLowerCase())) {
+        result.adjustments.push({ name: key, amt: val });
+        result.confidence.push(`Found Arrears ${key}: +₹${val}`);
+      }
+      return;
+    }
+
+    // F. Outstanding Surcharge / Interest / Penalty
+    if (/o\/?s\s*surcharge|outstanding\s*surcharge|penalty|interest/i.test(key)) {
+      if (val > 0 && !result.adjustments.some(a => a.name.toLowerCase() === key.toLowerCase())) {
+        result.adjustments.push({ name: key, amt: val });
+        result.confidence.push(`Found Surcharge/Penalty ${key}: +₹${val}`);
+      }
+      return;
+    }
+
+    // G. Misc Payable
+    if (/misc\s*(?:payable|charges?)|miscellaneous/i.test(key)) {
+      if (val > 0 && !result.adjustments.some(a => a.name.toLowerCase() === key.toLowerCase())) {
+        result.adjustments.push({ name: key, amt: val });
+        result.confidence.push(`Found Misc Payable: +₹${val}`);
+      }
+      return;
+    }
   });
+
+  // Direct line regex check for adjustments in case not captured by kvPairs
+  const directAdjRegex = /\b(adjustment|tariff\s*subsidy|govt\.?\s*subsidy|prompt\s*payment\s*rebate|principal\s*arrear)\b\s*[:：=\-]?\s*(?:₹|rs\.?)?\s*(-?[0-9]+(?:\.[0-9]{1,2})?)/gi;
+  let dAdjMatch;
+  while ((dAdjMatch = directAdjRegex.exec(cleanText)) !== null) {
+    const adjName = dAdjMatch[1].trim();
+    const adjAmt = parseFloat(dAdjMatch[2]);
+    if (!isNaN(adjAmt) && Math.abs(adjAmt) > 0) {
+      if (!result.adjustments.some(a => a.name.toLowerCase().includes(adjName.toLowerCase()))) {
+        result.adjustments.push({ name: adjName, amt: adjAmt });
+        result.confidence.push(`Found Adjustment ${adjName}: ${adjAmt < 0 ? '-' : '+'}₹${Math.abs(adjAmt)}`);
+      }
+    }
+  }
 
   // ── 6. NET TOTAL AMOUNT ──
   lines.forEach(line => {
